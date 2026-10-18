@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <main className="relative flex min-h-svh flex-1 overflow-hidden px-6 py-8 sm:px-10 lg:px-16">
@@ -15,9 +17,20 @@ export default function Home() {
           <p className="text-lg font-black tracking-[-0.05em]">
             UNI<span className="text-accent">-</span>TALENT
           </p>
-          <span className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
-            Phase 0 complete
-          </span>
+          <nav aria-label="Account" className="flex items-center gap-2">
+            <Link
+              className="rounded-full px-4 py-2 text-sm font-semibold transition hover:bg-muted focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              href="/auth/login"
+            >
+              Sign in
+            </Link>
+            <Link
+              className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              href="/auth/sign-up"
+            >
+              Join with SDSU
+            </Link>
+          </nav>
         </header>
 
         <section className="grid flex-1 items-center gap-12 py-16 lg:grid-cols-[1.15fr_0.85fr] lg:py-24">
@@ -36,6 +49,20 @@ export default function Home() {
               UNI-TALENT will help verified SDSU students discover services,
               explore portfolios, and connect directly with student creators.
             </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                className="rounded-full bg-accent px-6 py-3 text-sm font-bold text-accent-foreground transition hover:-translate-y-0.5 hover:bg-accent/90 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                href="/auth/sign-up"
+              >
+                Create an account
+              </Link>
+              <Link
+                className="rounded-full border border-border bg-card px-6 py-3 text-sm font-bold transition hover:border-foreground/25 hover:bg-muted focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                href="/auth/login"
+              >
+                Student sign in
+              </Link>
+            </div>
           </div>
 
           <aside className="relative mx-auto w-full max-w-md rotate-2 rounded-[2rem] border border-border bg-card p-7 shadow-[0_24px_80px_rgba(37,40,32,0.10)] transition-transform duration-300 hover:rotate-0">
