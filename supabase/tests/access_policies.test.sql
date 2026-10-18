@@ -2,7 +2,20 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(37);
+select plan(38);
+
+-- Keep assertions deterministic when the local development seed is enabled.
+-- The surrounding transaction rolls this cleanup back after the suite.
+truncate table
+  public.service_reports,
+  public.portfolio_items,
+  public.service_skills,
+  public.services,
+  public.contact_methods,
+  public.skills,
+  public.user_roles,
+  public.profiles
+cascade;
 
 insert into auth.users (
   id,
@@ -24,8 +37,8 @@ values
     'owner@sdsu.edu',
     '',
     now(),
-    '{}',
-    '{}',
+    '{"provider":"email","providers":["email"]}',
+    '{"full_name":"Owner Student"}',
     now(),
     now()
   ),
@@ -36,8 +49,8 @@ values
     'other@sdsu.edu',
     '',
     now(),
-    '{}',
-    '{}',
+    '{"provider":"email","providers":["email"]}',
+    '{"full_name":"Other Student"}',
     now(),
     now()
   ),
@@ -48,8 +61,8 @@ values
     'outsider@example.com',
     '',
     now(),
-    '{}',
-    '{}',
+    '{"provider":"email","providers":["email"]}',
+    '{"full_name":"Outside User"}',
     now(),
     now()
   ),
@@ -60,18 +73,11 @@ values
     'admin@sdsu.edu',
     '',
     now(),
-    '{}',
-    '{}',
+    '{"provider":"email","providers":["email"]}',
+    '{"full_name":"Admin Student"}',
     now(),
     now()
   );
-
-insert into public.profiles (id, full_name)
-values
-  ('10000000-0000-0000-0000-000000000001', 'Owner Student'),
-  ('10000000-0000-0000-0000-000000000002', 'Other Student'),
-  ('10000000-0000-0000-0000-000000000003', 'Outside User'),
-  ('10000000-0000-0000-0000-000000000004', 'Admin Student');
 
 insert into public.user_roles (user_id, role)
 values ('10000000-0000-0000-0000-000000000004', 'admin');
@@ -145,8 +151,8 @@ insert into public.skills (id, name, normalized_name, created_by, is_hidden)
 values
   (
     '30000000-0000-0000-0000-000000000001',
-    'Photography',
-    'photography',
+    'Policy Test Photography',
+    'policy test photography',
     '10000000-0000-0000-0000-000000000002',
     false
   ),
@@ -230,6 +236,16 @@ select is(
   )::integer,
   403,
   'the signup hook rejects a non-SDSU domain'
+);
+
+select results_eq(
+  $$
+    select full_name
+    from public.profiles
+    where id = '10000000-0000-0000-0000-000000000001'
+  $$,
+  array['Owner Student'::text],
+  'creating an Auth user provisions a profile from safe metadata'
 );
 
 set local role anon;

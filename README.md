@@ -56,7 +56,9 @@ npm run db:lint
 npm run supabase:stop
 ```
 
-The local Auth configuration requires email confirmation and accepts redirects under `http://localhost:3000`. The initial schema enables row-level security with no policies, so application data remains inaccessible through the Data API until the Phase 1 policies are added.
+The local Auth configuration requires email confirmation and accepts redirects under `http://localhost:3000`. Row-level security policies restrict application data to confirmed SDSU students and enforce owner/admin permissions.
+
+See [the database guide](docs/database.md) for the entity relationships, security model, local demo accounts, and migration workflow.
 
 ## Stack
 
