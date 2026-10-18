@@ -43,7 +43,20 @@ Run all non-build checks with `npm run check`.
 - **Preview:** values belong in the Vercel Preview environment and should point to non-production Supabase resources.
 - **Production:** values belong in the Vercel Production environment and should point to production resources.
 - Variables prefixed with `NEXT_PUBLIC_` are bundled for the browser and must never contain secrets.
-- `SUPABASE_SERVICE_ROLE_KEY` is server-only and is reserved for narrowly scoped administrative work. Ordinary user requests must rely on the authenticated session and row-level security.
+- `SUPABASE_SECRET_KEY` is server-only and is reserved for narrowly scoped administrative work. Ordinary user requests must rely on the authenticated session and row-level security.
+
+## Local database
+
+The version-controlled Supabase configuration and migrations live in `supabase/`. A Docker-compatible container runtime is required to run the complete local stack.
+
+```bash
+npm run supabase:start
+npm run db:reset
+npm run db:lint
+npm run supabase:stop
+```
+
+The local Auth configuration requires email confirmation and accepts redirects under `http://localhost:3000`. The initial schema enables row-level security with no policies, so application data remains inaccessible through the Data API until the Phase 1 policies are added.
 
 ## Stack
 
