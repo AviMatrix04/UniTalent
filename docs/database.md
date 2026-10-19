@@ -133,6 +133,8 @@ UniTalentDemo123!
 
 The seed contains no real people or production information. It intentionally contains no portfolio rows until Storage-backed development images are added. Never run `supabase db push --include-seed` against production.
 
+When adding a migration, reset the local database and run both database checks before opening a pull request so the full migration chain and access policies are exercised.
+
 ## Development workflow
 
 ```bash
@@ -146,4 +148,5 @@ npm run supabase:stop
 - `db:reset` destroys only the local database because the package script includes `--local`, then reapplies every migration and the seed file.
 - Permanent schema changes belong in a new timestamped migration, not in the hosted Table Editor.
 - `db:test` runs the pgTAP access-policy suite.
+- `db:lint` checks the local schema and reports migration issues at warning level.
 - Deploy pending migrations only after review with `supabase db push`; seed data requires a separate explicit `--include-seed` flag.
