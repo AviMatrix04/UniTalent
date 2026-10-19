@@ -2,6 +2,7 @@ export const SERVICE_TITLE_MIN = 5;
 export const SERVICE_TITLE_MAX = 100;
 export const SERVICE_DESCRIPTION_MIN = 20;
 export const SERVICE_DESCRIPTION_MAX = 2000;
+export const MAX_SERVICE_SKILLS = 5;
 
 export const pricingUnits = ["hour", "project"] as const;
 export type PricingUnit = (typeof pricingUnits)[number];
@@ -19,6 +20,28 @@ type ServiceValidationResult =
 
 function normalizeText(value: string) {
   return value.trim().replace(/\s+/g, " ");
+}
+
+export function normalizeSkillName(value: string) {
+  return normalizeText(value).toLowerCase();
+}
+
+export function validateSkillNames(values: string[]) {
+  if (values.length > MAX_SERVICE_SKILLS) {
+    return { error: `Choose no more than ${MAX_SERVICE_SKILLS} skills.` };
+  }
+
+  const names = values.map(normalizeText);
+  if (names.some((name) => name.length < 1 || name.length > 50)) {
+    return { error: "Each skill must use between 1 and 50 characters." };
+  }
+
+  const normalized = names.map(normalizeSkillName);
+  if (new Set(normalized).size !== normalized.length) {
+    return { error: "Choose each skill only once." };
+  }
+
+  return { names };
 }
 
 export function isPricingUnit(value: string): value is PricingUnit {

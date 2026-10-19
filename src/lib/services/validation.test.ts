@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   centsToUsdInput,
   formatServicePrice,
+  normalizeSkillName,
   parseUsdToCents,
+  validateSkillNames,
   validateService,
 } from "./validation";
 
@@ -68,5 +70,18 @@ describe("service validation", () => {
     expect(formatServicePrice(0, "project")).toBe("Free");
     expect(formatServicePrice(2500, "hour")).toBe("$25/hour");
     expect(formatServicePrice(2550, "project")).toBe("$25.50/service");
+  });
+
+  it("normalizes and validates up to five unique skills", () => {
+    expect(normalizeSkillName("  Graphic   Design ")).toBe("graphic design");
+    expect(validateSkillNames(["Photography", " Graphic   Design "])).toEqual({
+      names: ["Photography", "Graphic Design"],
+    });
+    expect(
+      validateSkillNames(["One", "Two", "Three", "Four", "Five", "Six"]).error,
+    ).toMatch(/no more than 5/);
+    expect(validateSkillNames(["Design", " design "]).error).toMatch(
+      /only once/,
+    );
   });
 });

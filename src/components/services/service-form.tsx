@@ -5,8 +5,11 @@ import {
   CircleAlert,
   Eye,
   LoaderCircle,
+  Plus,
   Save,
   Sparkles,
+  Tag,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useState } from "react";
@@ -19,12 +22,16 @@ import {
 import { inputClassName } from "@/components/auth/styles";
 import {
   formatServicePrice,
+  MAX_SERVICE_SKILLS,
+  normalizeSkillName,
   parseUsdToCents,
   type ServiceFormFields,
 } from "@/lib/services/validation";
 
 type ServiceFormProps = {
+  availableSkills: string[];
   initialFields: ServiceFormFields;
+  initialSkills?: string[];
   message?: string;
   mode: "create" | "edit";
   serviceId?: string;
@@ -32,7 +39,9 @@ type ServiceFormProps = {
 };
 
 export function ServiceForm({
+  availableSkills,
   initialFields,
+  initialSkills = [],
   message,
   mode,
   serviceId,
@@ -45,7 +54,45 @@ export function ServiceForm({
   const initialState: ServiceFormState = { fields: initialFields };
   const [formState, formAction, pending] = useActionState(action, initialState);
   const [preview, setPreview] = useState(initialFields);
+  const [selectedSkills, setSelectedSkills] = useState(initialSkills);
+  const [skillInput, setSkillInput] = useState("");
+  const [skillError, setSkillError] = useState<string | null>(null);
   const previewCents = parseUsdToCents(preview.price);
+
+  function addSkill() {
+    const skill = skillInput.trim().replace(/\s+/g, " ");
+
+    if (!skill) return;
+    if (skill.length > 50) {
+      setSkillError("Skills can use at most 50 characters.");
+      return;
+    }
+    if (selectedSkills.length >= MAX_SERVICE_SKILLS) {
+      setSkillError(`Choose no more than ${MAX_SERVICE_SKILLS} skills.`);
+      return;
+    }
+    const existingSkill = availableSkills.find(
+      (available) =>
+        normalizeSkillName(available) === normalizeSkillName(skill),
+    );
+    if (!existingSkill) {
+      setSkillError("Choose a skill from the dropdown.");
+      return;
+    }
+    if (
+      selectedSkills.some(
+        (selected) =>
+          normalizeSkillName(selected) === normalizeSkillName(skill),
+      )
+    ) {
+      setSkillError("That skill is already selected.");
+      return;
+    }
+
+    setSelectedSkills((current) => [...current, existingSkill ?? skill]);
+    setSkillInput("");
+    setSkillError(null);
+  }
 
   return (
     <div className="grid gap-8 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] xl:items-start">
@@ -209,6 +256,94 @@ export function ServiceForm({
               ) : null}
             </fieldset>
 
+            <fieldset>
+              <legend className="text-sm font-semibold">Skills</legend>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Add up to five skills that help students discover this service.
+                You can select an existing skill or create a new one.
+              </p>
+
+              {selectedSkills.map((skill) => (
+                <input key={skill} name="skills" type="hidden" value={skill} />
+              ))}
+
+              <div className="mt-4 flex gap-2">
+                <div className="min-w-0 flex-1">
+                  <label className="sr-only" htmlFor="skill-input">
+                    Add a skill
+                  </label>
+                  <select
+                    className={`${inputClassName} mt-0`}
+                    disabled={selectedSkills.length >= MAX_SERVICE_SKILLS}
+                    id="skill-input"
+                    value={skillInput}
+                    onChange={(event) => setSkillInput(event.target.value)}
+                  >
+                    <option value="">Choose a skill…</option>
+                    {availableSkills
+                      .filter(
+                        (skill) =>
+                          !selectedSkills.some(
+                            (selected) =>
+                              normalizeSkillName(selected) ===
+                              normalizeSkillName(skill),
+                          ),
+                      )
+                      .map((skill) => (
+                        <option key={skill} value={skill}>
+                          {skill}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <button
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-border px-4 text-sm font-bold transition hover:border-foreground/30 hover:bg-muted disabled:opacity-50"
+                  disabled={
+                    selectedSkills.length >= MAX_SERVICE_SKILLS ||
+                    !skillInput.trim()
+                  }
+                  type="button"
+                  onClick={addSkill}
+                >
+                  <Plus aria-hidden="true" className="size-4" />
+                  Add
+                </button>
+              </div>
+
+              <div className="mt-4 flex min-h-8 flex-wrap items-center gap-2">
+                {selectedSkills.map((skill) => (
+                  <span
+                    key={skill}
+                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold"
+                  >
+                    <Tag aria-hidden="true" className="size-3" />
+                    {skill}
+                    <button
+                      aria-label={`Remove ${skill}`}
+                      className="ml-1 rounded-full p-0.5 hover:bg-foreground/10"
+                      type="button"
+                      onClick={() => {
+                        setSelectedSkills((current) =>
+                          current.filter((selected) => selected !== skill),
+                        );
+                        setSkillError(null);
+                      }}
+                    >
+                      <X aria-hidden="true" className="size-3" />
+                    </button>
+                  </span>
+                ))}
+                <span className="text-xs text-muted-foreground">
+                  {selectedSkills.length}/{MAX_SERVICE_SKILLS} selected
+                </span>
+              </div>
+              {skillError ? (
+                <p className="mt-2 text-xs text-destructive" role="alert">
+                  {skillError}
+                </p>
+              ) : null}
+            </fieldset>
+
             <div className="flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
               <Link
                 className="inline-flex h-12 items-center justify-center rounded-xl px-5 text-sm font-semibold transition hover:bg-muted"
@@ -267,6 +402,18 @@ export function ServiceForm({
               {preview.description.trim() ||
                 "Your description will appear here as you type."}
             </p>
+            {selectedSkills.length > 0 ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {selectedSkills.map((skill) => (
+                  <span
+                    key={skill}
+                    className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <div className="mt-6 border-t border-border pt-5">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
                 Starting at

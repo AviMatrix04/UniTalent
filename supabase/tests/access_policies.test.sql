@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(58);
+select plan(67);
 
 -- Keep assertions deterministic when the local development seed is enabled.
 -- The surrounding transaction rolls this cleanup back after the suite.
@@ -740,6 +740,111 @@ select throws_ok(
   'P0001',
   'That service cannot be published.',
   'a student cannot publish another student service'
+);
+
+select lives_ok(
+  $$
+    select public.save_service(
+      '20000000-0000-0000-0000-000000000004',
+      'Second Owner Draft',
+      'A complete description for another owner draft.',
+      3000,
+      'hour',
+      array['Photography', 'Web Design']
+    )
+  $$,
+  'saving a service atomically attaches ordered skills'
+);
+
+select results_eq(
+  $$
+    select count(*)
+    from public.service_skills
+    where service_id = '20000000-0000-0000-0000-000000000004'
+  $$,
+  array[2::bigint],
+  'a saved service contains its selected skills'
+);
+
+select results_eq(
+  $$select count(*) from public.skills where normalized_name = 'web design'$$,
+  array[1::bigint],
+  'normalized skill names reuse the existing skill record'
+);
+
+select throws_ok(
+  $$
+    select public.save_service(
+      '20000000-0000-0000-0000-000000000004',
+      'Second Owner Draft',
+      'A complete description for another owner draft.',
+      3000,
+      'hour',
+      array['Design', ' design ']
+    )
+  $$,
+  '23505',
+  'Each skill can be selected only once.',
+  'duplicate normalized skills are rejected'
+);
+
+select throws_ok(
+  $$
+    select public.save_service(
+      '20000000-0000-0000-0000-000000000004',
+      'Second Owner Draft',
+      'A complete description for another owner draft.',
+      3000,
+      'hour',
+      array['One', 'Two', 'Three', 'Four', 'Five', 'Six']
+    )
+  $$,
+  '23514',
+  'A service can have at most five skills.',
+  'more than five skills are rejected transactionally'
+);
+
+select results_eq(
+  $$
+    select count(*)
+    from public.search_services(
+      null,
+      array['policy test photography', 'photography'],
+      null,
+      null,
+      'newest'
+    )
+  $$,
+  array[3::bigint],
+  'discovery filters published services by any selected skill'
+);
+
+select results_eq(
+  $$
+    select count(*)
+    from public.search_services('web design', array[]::text[], null, null, 'newest')
+  $$,
+  array[1::bigint],
+  'discovery search matches skill names'
+);
+
+select results_eq(
+  $$
+    select count(*)
+    from public.search_services(null, array[]::text[], 4000, null, 'newest')
+  $$,
+  array[1::bigint],
+  'discovery applies price boundaries only to published services'
+);
+
+select results_eq(
+  $$
+    select service_id
+    from public.search_services(null, array[]::text[], null, null, 'price_desc')
+    limit 1
+  $$,
+  array['20000000-0000-0000-0000-000000000002'::uuid],
+  'discovery sorts published services by descending price'
 );
 
 select throws_ok(

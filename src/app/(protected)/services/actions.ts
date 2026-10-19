@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { isSdsuEmail } from "@/lib/auth/validation";
 import {
   type ServiceFormFields,
+  validateSkillNames,
   validateService,
 } from "@/lib/services/validation";
 import { createClient } from "@/lib/supabase/server";
@@ -45,6 +46,23 @@ function submittedFields(formData: FormData): ServiceFormFields {
   };
 }
 
+function submittedSkills(formData: FormData) {
+  return formData
+    .getAll("skills")
+    .filter((value): value is string => typeof value === "string");
+}
+
+function safeSkillError(message?: string) {
+  return [
+    "A service can have at most five skills.",
+    "Each skill can be selected only once.",
+    "Skills must use between 1 and 50 characters.",
+    "One of the selected skills is unavailable.",
+  ].includes(message ?? "")
+    ? message
+    : null;
+}
+
 async function authenticatedStudent(nextPath: string) {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
@@ -74,29 +92,32 @@ export async function createService(
     return { fields, error: result.error };
   }
 
-  const { supabase, userId } = await authenticatedStudent("/services/new");
-  const { data, error } = await supabase
-    .from("services")
-    .insert({
-      student_id: userId,
-      title: result.data.title,
-      description: result.data.description,
-      price_cents: result.data.priceCents,
-      price_unit: result.data.priceUnit,
-      status: "draft",
-    })
-    .select("id")
-    .single();
+  const skillResult = validateSkillNames(submittedSkills(formData));
+  if (skillResult.error || !skillResult.names) {
+    return { fields, error: skillResult.error };
+  }
+
+  const { supabase } = await authenticatedStudent("/services/new");
+  const { data, error } = await supabase.rpc("save_service", {
+    target_service_id: null,
+    service_title: result.data.title,
+    service_description: result.data.description,
+    service_price_cents: result.data.priceCents,
+    service_price_unit: result.data.priceUnit,
+    skill_names: skillResult.names,
+  });
 
   if (error || !data) {
     return {
       fields,
-      error: "Your draft could not be created. Please try again.",
+      error:
+        safeSkillError(error?.message) ??
+        "Your draft could not be created. Please try again.",
     };
   }
 
   revalidatePath("/dashboard");
-  redirect(`/services/${data.id}/edit?message=Draft+created.`);
+  redirect(`/services/${data}/edit?message=Draft+created.`);
 }
 
 export async function updateService(
@@ -116,26 +137,28 @@ export async function updateService(
     return { fields, error: result.error };
   }
 
+  const skillResult = validateSkillNames(submittedSkills(formData));
+  if (skillResult.error || !skillResult.names) {
+    return { fields, error: skillResult.error };
+  }
+
   const editPath = `/services/${serviceId}/edit`;
-  const { supabase, userId } = await authenticatedStudent(editPath);
-  const { data, error } = await supabase
-    .from("services")
-    .update({
-      title: result.data.title,
-      description: result.data.description,
-      price_cents: result.data.priceCents,
-      price_unit: result.data.priceUnit,
-    })
-    .eq("id", serviceId)
-    .eq("student_id", userId)
-    .neq("status", "hidden")
-    .select("id")
-    .maybeSingle();
+  const { supabase } = await authenticatedStudent(editPath);
+  const { data, error } = await supabase.rpc("save_service", {
+    target_service_id: serviceId,
+    service_title: result.data.title,
+    service_description: result.data.description,
+    service_price_cents: result.data.priceCents,
+    service_price_unit: result.data.priceUnit,
+    skill_names: skillResult.names,
+  });
 
   if (error) {
     return {
       fields,
-      error: "Your service could not be saved. Please try again.",
+      error:
+        safeSkillError(error.message) ??
+        "Your service could not be saved. Please try again.",
     };
   }
 

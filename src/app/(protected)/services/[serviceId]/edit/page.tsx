@@ -29,14 +29,46 @@ export default async function EditServicePage({
 
   if (!userId) redirect(`/auth/login?next=/services/${serviceId}/edit`);
 
-  const { data: service, error } = await supabase
-    .from("services")
-    .select("id,title,description,price_cents,price_unit,status")
-    .eq("id", serviceId)
-    .eq("student_id", userId)
-    .maybeSingle();
+  const [serviceResult, availableSkillsResult, selectedSkillsResult] =
+    await Promise.all([
+      supabase
+        .from("services")
+        .select("id,title,description,price_cents,price_unit,status")
+        .eq("id", serviceId)
+        .eq("student_id", userId)
+        .maybeSingle(),
+      supabase
+        .from("skills")
+        .select("name")
+        .eq("is_hidden", false)
+        .order("normalized_name")
+        .limit(100),
+      supabase
+        .from("service_skills")
+        .select("position,skills(name)")
+        .eq("service_id", serviceId)
+        .order("position"),
+    ]);
 
-  if (error || !service || service.status === "hidden") notFound();
+  const { data: service, error } = serviceResult;
+
+  if (
+    error ||
+    !service ||
+    service.status === "hidden" ||
+    availableSkillsResult.error ||
+    selectedSkillsResult.error
+  ) {
+    notFound();
+  }
+
+  const initialSkills = (selectedSkillsResult.data ?? [])
+    .map((link) => {
+      const related = link.skills as
+        { name?: string } | { name?: string }[] | null;
+      return Array.isArray(related) ? related[0]?.name : related?.name;
+    })
+    .filter((name): name is string => Boolean(name));
 
   const priceUnit = isPricingUnit(service.price_unit)
     ? service.price_unit
@@ -49,6 +81,9 @@ export default async function EditServicePage({
   return (
     <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
       <ServiceForm
+        availableSkills={(availableSkillsResult.data ?? []).map(
+          (skill) => skill.name,
+        )}
         initialFields={{
           title: service.title,
           description: service.description,
@@ -57,6 +92,7 @@ export default async function EditServicePage({
         }}
         message={message}
         mode="edit"
+        initialSkills={initialSkills}
         serviceId={service.id}
         status={status}
       />
