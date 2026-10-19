@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(49);
+select plan(58);
 
 -- Keep assertions deterministic when the local development seed is enabled.
 -- The surrounding transaction rolls this cleanup back after the suite.
@@ -656,6 +656,90 @@ select results_eq(
   $$,
   array[1::bigint],
   'an owner with a visible contact can publish their service'
+);
+
+update public.profiles
+set bio = null
+where id = '10000000-0000-0000-0000-000000000001';
+
+select throws_ok(
+  $$select public.publish_service('20000000-0000-0000-0000-000000000004')$$,
+  'P0001',
+  'Complete your name and bio before publishing.',
+  'publishing rejects an incomplete provider profile'
+);
+
+update public.profiles
+set bio = 'My restored profile biography.'
+where id = '10000000-0000-0000-0000-000000000001';
+
+update public.contact_methods
+set is_visible = false
+where profile_id = '10000000-0000-0000-0000-000000000001';
+
+select throws_ok(
+  $$select public.publish_service('20000000-0000-0000-0000-000000000004')$$,
+  'P0001',
+  'Add at least one visible contact method before publishing.',
+  'publishing rejects a provider without a visible contact method'
+);
+
+update public.contact_methods
+set is_visible = true
+where profile_id = '10000000-0000-0000-0000-000000000001'
+  and type = 'email';
+
+select lives_ok(
+  $$select public.publish_service('20000000-0000-0000-0000-000000000004')$$,
+  'the lifecycle function publishes a valid owner service'
+);
+
+select results_eq(
+  $$
+    select status::text
+    from public.services
+    where id = '20000000-0000-0000-0000-000000000004'
+      and published_at is not null
+  $$,
+  array['published'::text],
+  'publishing atomically sets the status and publication timestamp'
+);
+
+select lives_ok(
+  $$select public.archive_service('20000000-0000-0000-0000-000000000004')$$,
+  'an owner can archive their published service'
+);
+
+select results_eq(
+  $$
+    select status::text
+    from public.services
+    where id = '20000000-0000-0000-0000-000000000004'
+  $$,
+  array['archived'::text],
+  'an archived service records its new state'
+);
+
+select lives_ok(
+  $$select public.publish_service('20000000-0000-0000-0000-000000000004')$$,
+  'an owner can republish an archived service'
+);
+
+select results_eq(
+  $$
+    select status::text
+    from public.services
+    where id = '20000000-0000-0000-0000-000000000004'
+  $$,
+  array['published'::text],
+  'republishing restores the published state'
+);
+
+select throws_ok(
+  $$select public.publish_service('20000000-0000-0000-0000-000000000003')$$,
+  'P0001',
+  'That service cannot be published.',
+  'a student cannot publish another student service'
 );
 
 select throws_ok(

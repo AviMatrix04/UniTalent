@@ -1,0 +1,285 @@
+"use client";
+
+import {
+  ArrowLeft,
+  CircleAlert,
+  Eye,
+  LoaderCircle,
+  Save,
+  Sparkles,
+} from "lucide-react";
+import Link from "next/link";
+import { useActionState, useState } from "react";
+
+import {
+  createService,
+  type ServiceFormState,
+  updateService,
+} from "@/app/(protected)/services/actions";
+import { inputClassName } from "@/components/auth/styles";
+import {
+  formatServicePrice,
+  parseUsdToCents,
+  type ServiceFormFields,
+} from "@/lib/services/validation";
+
+type ServiceFormProps = {
+  initialFields: ServiceFormFields;
+  message?: string;
+  mode: "create" | "edit";
+  serviceId?: string;
+  status?: "draft" | "published" | "archived";
+};
+
+export function ServiceForm({
+  initialFields,
+  message,
+  mode,
+  serviceId,
+  status = "draft",
+}: ServiceFormProps) {
+  const action =
+    mode === "edit" && serviceId
+      ? updateService.bind(null, serviceId)
+      : createService;
+  const initialState: ServiceFormState = { fields: initialFields };
+  const [formState, formAction, pending] = useActionState(action, initialState);
+  const [preview, setPreview] = useState(initialFields);
+  const previewCents = parseUsdToCents(preview.price);
+
+  return (
+    <div className="grid gap-8 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] xl:items-start">
+      <section>
+        <Link
+          className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground"
+          href="/dashboard"
+        >
+          <ArrowLeft aria-hidden="true" className="size-4" />
+          Back to dashboard
+        </Link>
+
+        <div className="mt-7">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">
+            {mode === "create" ? "New service" : `Editing ${status}`}
+          </p>
+          <h1 className="mt-3 font-heading text-5xl leading-none tracking-[-0.04em]">
+            {mode === "create" ? "Offer your talent." : "Shape your listing."}
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Start with the essentials. Skill tags and portfolio images arrive in
+            later phases, and this listing will remain private until you publish
+            it.
+          </p>
+        </div>
+
+        <form
+          action={formAction}
+          className="mt-8 rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8"
+        >
+          {formState.error ? (
+            <div
+              className="mb-6 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+              role="alert"
+            >
+              {formState.error}
+            </div>
+          ) : message ? (
+            <div
+              className="mb-6 rounded-xl border border-secondary bg-secondary/60 px-4 py-3 text-sm"
+              role="status"
+            >
+              {message}
+            </div>
+          ) : null}
+
+          <div className="space-y-7">
+            <label className="block text-sm font-semibold">
+              Service title
+              <input
+                className={inputClassName}
+                defaultValue={formState.fields.title}
+                maxLength={100}
+                minLength={5}
+                name="title"
+                placeholder="Portrait photography for graduation"
+                required
+                type="text"
+                onChange={(event) =>
+                  setPreview((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+              />
+              <span className="mt-2 block text-xs font-normal text-muted-foreground">
+                Be specific about what another student can ask you to do.
+              </span>
+            </label>
+
+            <label className="block text-sm font-semibold">
+              Description
+              <textarea
+                className={`${inputClassName} min-h-48 resize-y py-3 leading-6`}
+                defaultValue={formState.fields.description}
+                maxLength={2000}
+                minLength={20}
+                name="description"
+                placeholder="Describe what you offer, what is included, and what a student should know before contacting you."
+                required
+                onChange={(event) =>
+                  setPreview((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+              />
+              <span className="mt-2 block text-xs font-normal text-muted-foreground">
+                20–2,000 characters.
+              </span>
+            </label>
+
+            <fieldset>
+              <legend className="text-sm font-semibold">Pricing</legend>
+              <div className="mt-2 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(180px,0.7fr)]">
+                <label className="block text-sm font-medium">
+                  Price in USD
+                  <div className="relative mt-2">
+                    <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm text-muted-foreground">
+                      $
+                    </span>
+                    <input
+                      aria-describedby="price-help"
+                      className={`${inputClassName} mt-0 pl-8`}
+                      defaultValue={formState.fields.price}
+                      inputMode="decimal"
+                      maxLength={11}
+                      name="price"
+                      pattern="[0-9]+([.][0-9]{1,2})?"
+                      placeholder="25.00"
+                      required
+                      type="text"
+                      onChange={(event) =>
+                        setPreview((current) => ({
+                          ...current,
+                          price: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </label>
+
+                <label className="block text-sm font-medium">
+                  Charge per
+                  <select
+                    className={inputClassName}
+                    defaultValue={formState.fields.priceUnit}
+                    name="priceUnit"
+                    required
+                    onChange={(event) =>
+                      setPreview((current) => ({
+                        ...current,
+                        priceUnit: event.target.value as "hour" | "project",
+                      }))
+                    }
+                  >
+                    <option value="hour">Hour</option>
+                    <option value="project">Service</option>
+                  </select>
+                </label>
+              </div>
+              <p
+                className="mt-3 text-xs leading-5 text-muted-foreground"
+                id="price-help"
+              >
+                Pricing is required and may use up to two decimal places.
+              </p>
+              {previewCents === 0 ? (
+                <div
+                  aria-live="polite"
+                  className="mt-4 flex items-start gap-3 rounded-xl border border-accent/25 bg-accent/8 px-4 py-3 text-sm"
+                >
+                  <CircleAlert
+                    aria-hidden="true"
+                    className="mt-0.5 size-4 shrink-0 text-accent"
+                  />
+                  <p>
+                    This service will be displayed as <strong>Free</strong>.
+                  </p>
+                </div>
+              ) : null}
+            </fieldset>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
+              <Link
+                className="inline-flex h-12 items-center justify-center rounded-xl px-5 text-sm font-semibold transition hover:bg-muted"
+                href="/dashboard"
+              >
+                Cancel
+              </Link>
+              <button
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-6 text-sm font-bold text-primary-foreground transition hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:translate-y-0 disabled:opacity-60"
+                disabled={pending}
+                type="submit"
+              >
+                {pending ? (
+                  <LoaderCircle
+                    aria-hidden="true"
+                    className="size-4 animate-spin"
+                  />
+                ) : (
+                  <Save aria-hidden="true" className="size-4" />
+                )}
+                {pending
+                  ? "Saving…"
+                  : mode === "create"
+                    ? "Create draft"
+                    : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <aside className="xl:sticky xl:top-24">
+        <div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+          <Eye aria-hidden="true" className="size-4" />
+          Listing preview
+        </div>
+        <article className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+          <div className="relative flex aspect-[16/10] items-end overflow-hidden bg-secondary p-6">
+            <div className="absolute -right-12 -top-16 size-56 rounded-full border border-foreground/10" />
+            <div className="absolute -bottom-20 -left-10 size-52 rounded-full bg-accent/90" />
+            <span className="relative inline-flex items-center gap-2 rounded-full bg-card/90 px-3 py-2 text-xs font-bold backdrop-blur">
+              <Sparkles aria-hidden="true" className="size-3.5 text-accent" />
+              Portfolio image coming in Phase 5
+            </span>
+          </div>
+          <div className="p-6">
+            <div className="flex items-start justify-between gap-5">
+              <h2 className="font-heading text-3xl leading-tight tracking-[-0.03em]">
+                {preview.title.trim() || "Your service title"}
+              </h2>
+              <span className="shrink-0 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold capitalize">
+                {status}
+              </span>
+            </div>
+            <p className="mt-4 line-clamp-4 whitespace-pre-line text-sm leading-6 text-muted-foreground">
+              {preview.description.trim() ||
+                "Your description will appear here as you type."}
+            </p>
+            <div className="mt-6 border-t border-border pt-5">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                Starting at
+              </p>
+              <p className="mt-1 text-xl font-bold">
+                {previewCents === null
+                  ? "Add a valid price"
+                  : formatServicePrice(previewCents, preview.priceUnit)}
+              </p>
+            </div>
+          </div>
+        </article>
+      </aside>
+    </div>
+  );
+}

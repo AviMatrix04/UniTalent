@@ -47,6 +47,12 @@ export default async function ProtectedLayout({
               </Link>
               <Link
                 className="rounded-full px-3 py-2 text-sm font-semibold transition hover:bg-muted"
+                href="/services/new"
+              >
+                Offer a service
+              </Link>
+              <Link
+                className="rounded-full px-3 py-2 text-sm font-semibold transition hover:bg-muted"
                 href="/profile/settings"
               >
                 Profile
