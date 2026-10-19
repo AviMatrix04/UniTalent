@@ -47,9 +47,10 @@ function submittedFields(formData: FormData): ServiceFormFields {
 }
 
 function submittedSkills(formData: FormData) {
-  return formData
+  const skills = formData
     .getAll("skills")
     .filter((value): value is string => typeof value === "string");
+  return skills.length ? skills : ["Other"];
 }
 
 function safeSkillError(message?: string) {
@@ -117,7 +118,7 @@ export async function createService(
   }
 
   revalidatePath("/dashboard");
-  redirect(`/services/${data}/edit?message=Draft+created.`);
+  redirect(`/services/${data}/edit?message=Draft+created.&celebrate=draft`);
 }
 
 export async function updateService(
@@ -195,7 +196,12 @@ export async function publishService(formData: FormData) {
   }
 
   revalidatePath("/dashboard");
-  dashboardRedirect("message", "Service published.");
+  const query = new URLSearchParams({
+    message: "Service published.",
+    celebrate: "published",
+    serviceId: id,
+  });
+  redirect(`/dashboard?${query.toString()}#services`);
 }
 
 export async function archiveService(formData: FormData) {

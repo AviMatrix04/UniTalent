@@ -20,10 +20,16 @@ export default async function NewServicePage() {
 
   if (error) throw new Error("Unable to load available skills.");
 
+  const orderedSkills = [...(skills ?? [])].sort((left, right) => {
+    if (left.name.toLowerCase() === "other") return 1;
+    if (right.name.toLowerCase() === "other") return -1;
+    return left.name.localeCompare(right.name);
+  });
+
   return (
     <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
       <ServiceForm
-        availableSkills={(skills ?? []).map((skill) => skill.name)}
+        availableSkills={orderedSkills.map((skill) => skill.name)}
         initialFields={{
           title: "",
           description: "",

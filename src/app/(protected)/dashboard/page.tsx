@@ -4,19 +4,21 @@ import {
   BadgeCheck,
   CircleAlert,
   Clock3,
-  Eye,
   FilePenLine,
-  Layers3,
   Plus,
   Sparkles,
 } from "lucide-react";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
-import { FormMessage } from "@/components/auth/form-elements";
+import { ServiceCelebration } from "@/components/services/service-celebration";
+import { DashboardStatCarousel } from "@/components/services/dashboard-stat-carousel";
 import { ServiceActions } from "@/components/services/service-actions";
+import { ToastMessage } from "@/components/ui/toast-message";
+import { SERVICE_IMAGE_BUCKET } from "@/lib/services/portfolio";
 import { formatServicePrice, isPricingUnit } from "@/lib/services/validation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -49,14 +51,24 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 type DashboardPageProps = {
-  searchParams: Promise<{ error?: string; message?: string }>;
+  searchParams: Promise<{
+    celebrate?: string;
+    error?: string;
+    message?: string;
+    serviceId?: string;
+  }>;
 };
 
 export default async function DashboardPage({
   searchParams,
 }: DashboardPageProps) {
   await connection();
-  const { error, message } = await searchParams;
+  const {
+    celebrate,
+    error,
+    message,
+    serviceId: celebratedServiceId,
+  } = await searchParams;
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims.sub;
@@ -89,6 +101,28 @@ export default async function DashboardPage({
 
   const profile = profileResult.data;
   const services = (servicesResult.data ?? []) as Service[];
+  const serviceIds = services.map((service) => service.id);
+  const coversResult = serviceIds.length
+    ? await supabase
+        .from("portfolio_items")
+        .select("service_id,storage_path")
+        .in("service_id", serviceIds)
+        .eq("is_cover", true)
+    : { data: [], error: null };
+
+  if (coversResult.error) {
+    throw new Error("Unable to load your service covers.");
+  }
+
+  const coverEntries = await Promise.all(
+    (coversResult.data ?? []).map(async (cover) => {
+      const { data } = await supabase.storage
+        .from(SERVICE_IMAGE_BUCKET)
+        .createSignedUrl(cover.storage_path, 60 * 60);
+      return [cover.service_id, data?.signedUrl ?? null] as const;
+    }),
+  );
+  const coverUrls = new Map(coverEntries);
   const hasVisibleContact = Boolean(contactsResult.data?.length);
   const profileReady = Boolean(
     profile.full_name && profile.bio && hasVisibleContact,
@@ -100,9 +134,21 @@ export default async function DashboardPage({
     },
     { draft: 0, published: 0, archived: 0, hidden: 0 },
   );
+  const profileStepsCompleted = [
+    Boolean(profile.full_name),
+    Boolean(profile.bio),
+    hasVisibleContact,
+  ].filter(Boolean).length;
+  const profileCompletion = Math.round((profileStepsCompleted / 3) * 100);
+  const firstName = profile.full_name?.trim().split(/\s+/)[0] || "creator";
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16">
+      <ToastMessage error={error} message={message} />
+      <ServiceCelebration
+        kind={celebrate === "published" ? "published" : undefined}
+        serviceId={celebratedServiceId}
+      />
       <section className="relative overflow-hidden rounded-[2rem] bg-primary px-6 py-10 text-primary-foreground sm:px-10 sm:py-12">
         <div className="absolute -right-20 -top-28 size-80 rounded-full border border-primary-foreground/15" />
         <div className="absolute -bottom-40 right-16 size-72 rounded-full bg-accent" />
@@ -112,11 +158,11 @@ export default async function DashboardPage({
               Your creative desk
             </p>
             <h1 className="mt-4 max-w-2xl font-heading text-5xl leading-[1.02] tracking-[-0.04em] sm:text-6xl">
-              What will you share with campus?
+              Welcome back, {firstName}.
             </h1>
             <p className="mt-5 max-w-xl text-sm leading-6 text-primary-foreground/70">
-              Create listings, keep private drafts, and manage everything you
-              offer from one place.
+              What will you share with campus today? Create listings, shape
+              private drafts, and manage everything you offer from one place.
             </p>
           </div>
           <Link
@@ -129,27 +175,12 @@ export default async function DashboardPage({
         </div>
       </section>
 
-      <section className="mt-6 grid gap-4 md:grid-cols-[1.15fr_0.85fr]">
-        <div className="grid grid-cols-3 gap-3 rounded-2xl border border-border bg-card p-5 shadow-sm sm:gap-5 sm:p-6">
-          {[
-            { label: "All services", value: services.length, icon: Layers3 },
-            { label: "Published", value: counts.published, icon: Eye },
-            { label: "Drafts", value: counts.draft, icon: FilePenLine },
-          ].map(({ label, value, icon: Icon }) => (
-            <div key={label}>
-              <Icon
-                aria-hidden="true"
-                className="mb-5 size-4 text-muted-foreground"
-              />
-              <p className="font-heading text-4xl tracking-[-0.04em]">
-                {value}
-              </p>
-              <p className="mt-1 text-xs leading-4 text-muted-foreground">
-                {label}
-              </p>
-            </div>
-          ))}
-        </div>
+      <section className="mt-6 grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
+        <DashboardStatCarousel
+          all={services.length}
+          drafts={counts.draft}
+          published={counts.published}
+        />
 
         <div
           className={`rounded-2xl border p-5 shadow-sm sm:p-6 ${
@@ -176,6 +207,21 @@ export default async function DashboardPage({
                   ? "Your bio and visible contact method are ready for publishing."
                   : "Add a bio and at least one visible contact before publishing."}
               </p>
+              <div
+                className="mt-4"
+                aria-label={`${profileCompletion}% profile complete`}
+              >
+                <div className="mb-2 flex items-center justify-between text-xs font-semibold">
+                  <span>Profile completion</span>
+                  <span>{profileCompletion}%</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-foreground/10">
+                  <div
+                    className="h-full rounded-full bg-accent"
+                    style={{ width: `${profileCompletion}%` }}
+                  />
+                </div>
+              </div>
               <Link
                 className="mt-4 inline-flex items-center gap-1 text-sm font-bold underline decoration-1 underline-offset-4"
                 href="/profile/settings"
@@ -209,10 +255,6 @@ export default async function DashboardPage({
           ) : null}
         </div>
 
-        <div className="mt-6">
-          <FormMessage error={error} message={message} />
-        </div>
-
         {services.length === 0 ? (
           <div className="mt-7 overflow-hidden rounded-3xl border border-dashed border-border bg-card p-8 text-center sm:p-14">
             <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-secondary">
@@ -239,14 +281,30 @@ export default async function DashboardPage({
               const priceUnit = isPricingUnit(service.price_unit)
                 ? service.price_unit
                 : "hour";
+              const coverUrl = coverUrls.get(service.id);
 
               return (
                 <article
                   key={service.id}
                   className="group grid gap-5 rounded-2xl border border-border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-md sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:p-6"
                 >
-                  <div className="flex size-12 items-center justify-center rounded-xl bg-secondary font-heading text-lg">
-                    {String(index + 1).padStart(2, "0")}
+                  <div className="relative flex size-16 items-center justify-center overflow-hidden rounded-2xl bg-secondary font-heading text-lg sm:size-20">
+                    {coverUrl ? (
+                      <Image
+                        alt=""
+                        className="object-cover transition duration-500 group-hover:scale-105"
+                        fill
+                        sizes="80px"
+                        src={coverUrl}
+                      />
+                    ) : (
+                      <>
+                        <span className="absolute -bottom-6 -right-5 size-14 rounded-full bg-accent/20" />
+                        <span className="relative">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                      </>
+                    )}
                   </div>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-3">
@@ -285,6 +343,12 @@ export default async function DashboardPage({
                     </span>
                   ) : (
                     <div className="flex flex-wrap items-center justify-end gap-1">
+                      <Link
+                        className="inline-flex h-10 items-center justify-center rounded-full px-3 text-sm font-bold transition hover:bg-muted"
+                        href={`/services/${service.id}`}
+                      >
+                        View
+                      </Link>
                       <Link
                         aria-label={`Edit ${service.title}`}
                         className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-border px-4 text-sm font-bold transition hover:border-foreground/30 hover:bg-muted"

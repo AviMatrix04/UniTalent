@@ -276,7 +276,9 @@ values
     'Other',
     'other',
     null
-  );
+  )
+on conflict (normalized_name) do update
+set name = excluded.name;
 
 insert into public.services (
   id,
@@ -352,17 +354,17 @@ values
 
 insert into public.service_skills (service_id, skill_id, position)
 values
-  ('d1100000-0000-0000-0000-000000000001', 'c1100000-0000-0000-0000-000000000001', 0),
-  ('d1100000-0000-0000-0000-000000000001', 'c1100000-0000-0000-0000-000000000002', 1),
-  ('d1100000-0000-0000-0000-000000000002', 'c1100000-0000-0000-0000-000000000001', 0),
-  ('d1100000-0000-0000-0000-000000000002', 'c1100000-0000-0000-0000-000000000002', 1),
-  ('d1100000-0000-0000-0000-000000000003', 'c1100000-0000-0000-0000-000000000003', 0),
-  ('d1100000-0000-0000-0000-000000000003', 'c1100000-0000-0000-0000-000000000004', 1),
-  ('d1100000-0000-0000-0000-000000000004', 'c1100000-0000-0000-0000-000000000007', 0),
-  ('d1100000-0000-0000-0000-000000000005', 'c1100000-0000-0000-0000-000000000005', 0),
-  ('d1100000-0000-0000-0000-000000000005', 'c1100000-0000-0000-0000-000000000006', 1),
-  ('d1100000-0000-0000-0000-000000000006', 'c1100000-0000-0000-0000-000000000005', 0),
-  ('d1100000-0000-0000-0000-000000000006', 'c1100000-0000-0000-0000-000000000008', 1);
+  ('d1100000-0000-0000-0000-000000000001', (select id from public.skills where normalized_name = 'photography'), 0),
+  ('d1100000-0000-0000-0000-000000000001', (select id from public.skills where normalized_name = 'portrait photography'), 1),
+  ('d1100000-0000-0000-0000-000000000002', (select id from public.skills where normalized_name = 'photography'), 0),
+  ('d1100000-0000-0000-0000-000000000002', (select id from public.skills where normalized_name = 'portrait photography'), 1),
+  ('d1100000-0000-0000-0000-000000000003', (select id from public.skills where normalized_name = 'mathematics'), 0),
+  ('d1100000-0000-0000-0000-000000000003', (select id from public.skills where normalized_name = 'tutoring'), 1),
+  ('d1100000-0000-0000-0000-000000000004', (select id from public.skills where normalized_name = 'resume review'), 0),
+  ('d1100000-0000-0000-0000-000000000005', (select id from public.skills where normalized_name = 'graphic design'), 0),
+  ('d1100000-0000-0000-0000-000000000005', (select id from public.skills where normalized_name = 'branding'), 1),
+  ('d1100000-0000-0000-0000-000000000006', (select id from public.skills where normalized_name = 'graphic design'), 0),
+  ('d1100000-0000-0000-0000-000000000006', (select id from public.skills where normalized_name = 'event flyers'), 1);
 
 insert into public.user_roles (user_id, role)
 values ('a1100000-0000-0000-0000-000000000004', 'admin');

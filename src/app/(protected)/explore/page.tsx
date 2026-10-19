@@ -1,4 +1,5 @@
 import {
+  ChevronDown,
   Filter,
   Search,
   SlidersHorizontal,
@@ -7,6 +8,7 @@ import {
   UserRound,
 } from "lucide-react";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { connection } from "next/server";
 
@@ -16,6 +18,8 @@ import {
   normalizeSkillName,
   parseUsdToCents,
 } from "@/lib/services/validation";
+import { AVATAR_BUCKET } from "@/lib/profile/avatar";
+import { SERVICE_IMAGE_BUCKET } from "@/lib/services/portfolio";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Explore services" };
@@ -101,7 +105,53 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
 
   const services = (servicesResult.data ?? []) as ServiceResult[];
   const popularSkills = (popularResult.data ?? []) as PopularSkill[];
-  const availableSkills = skillsResult.data ?? [];
+  const availableSkills = [...(skillsResult.data ?? [])].sort((left, right) => {
+    if (left.normalized_name === "other") return 1;
+    if (right.normalized_name === "other") return -1;
+    return left.normalized_name.localeCompare(right.normalized_name);
+  });
+  const serviceIds = services.map((service) => service.service_id);
+  const coverResult = serviceIds.length
+    ? await supabase
+        .from("portfolio_items")
+        .select("service_id,storage_path")
+        .in("service_id", serviceIds)
+        .eq("is_cover", true)
+    : { data: [], error: null };
+
+  if (coverResult.error) throw new Error("Unable to load service covers.");
+
+  const coverEntries = await Promise.all(
+    (coverResult.data ?? []).map(async (cover) => {
+      const { data } = await supabase.storage
+        .from(SERVICE_IMAGE_BUCKET)
+        .createSignedUrl(cover.storage_path, 60 * 60);
+      return [cover.service_id, data?.signedUrl ?? null] as const;
+    }),
+  );
+  const coverUrls = new Map(coverEntries);
+  const providerIds = [
+    ...new Set(services.map((service) => service.provider_id)),
+  ];
+  const avatarResult = providerIds.length
+    ? await supabase
+        .from("profiles")
+        .select("id,avatar_path")
+        .in("id", providerIds)
+        .not("avatar_path", "is", null)
+    : { data: [], error: null };
+
+  if (avatarResult.error) throw new Error("Unable to load provider photos.");
+
+  const avatarEntries = await Promise.all(
+    (avatarResult.data ?? []).map(async (profile) => {
+      const { data } = await supabase.storage
+        .from(AVATAR_BUCKET)
+        .createSignedUrl(profile.avatar_path!, 15 * 60);
+      return [profile.id, data?.signedUrl ?? null] as const;
+    }),
+  );
+  const avatarUrls = new Map(avatarEntries);
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16">
@@ -162,15 +212,21 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
           </label>
           <label className="text-sm font-semibold">
             Sort by
-            <select
-              className="mt-2 h-12 w-full rounded-xl border border-input bg-card px-4 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/15"
-              defaultValue={sort}
-              name="sort"
-            >
-              <option value="newest">Newest</option>
-              <option value="price_asc">Price: low to high</option>
-              <option value="price_desc">Price: high to low</option>
-            </select>
+            <div className="relative mt-2">
+              <select
+                className="!mt-0 h-12 w-full appearance-none rounded-xl border border-input bg-card px-4 pr-11 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/15"
+                defaultValue={sort}
+                name="sort"
+              >
+                <option value="newest">Newest</option>
+                <option value="price_asc">Price: low to high</option>
+                <option value="price_desc">Price: high to low</option>
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              />
+            </div>
           </label>
           <button
             className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground transition hover:bg-primary/90"
@@ -285,6 +341,8 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
                 .map((part) => part[0])
                 .join("")
                 .toUpperCase();
+              const coverUrl = coverUrls.get(service.service_id);
+              const avatarUrl = avatarUrls.get(service.provider_id);
 
               return (
                 <article
@@ -300,15 +358,33 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
                           : "bg-muted"
                     }`}
                   >
-                    <div className="absolute -right-14 -top-16 size-48 rounded-full border border-foreground/10 transition duration-500 group-hover:scale-110" />
-                    <div className="absolute -bottom-20 -left-10 size-44 rounded-full bg-accent/85 transition duration-500 group-hover:scale-110" />
+                    {coverUrl ? (
+                      <Image
+                        alt={`${service.title} cover`}
+                        className="object-cover"
+                        fill
+                        sizes="(max-width: 768px) 100vw, 33vw"
+                        src={coverUrl}
+                      />
+                    ) : null}
+                    {!coverUrl ? (
+                      <>
+                        <div className="absolute -right-14 -top-16 size-48 rounded-full border border-foreground/10 transition duration-500 group-hover:scale-110" />
+                        <div className="absolute -bottom-20 -left-10 size-44 rounded-full bg-accent/85 transition duration-500 group-hover:scale-110" />
+                      </>
+                    ) : null}
                     <span className="relative rounded-full bg-card/90 px-3 py-1.5 text-xs font-bold backdrop-blur">
                       {formatServicePrice(service.price_cents, priceUnit)}
                     </span>
                   </div>
                   <div className="p-6">
                     <h3 className="font-heading text-3xl leading-tight tracking-[-0.03em]">
-                      {service.title}
+                      <Link
+                        className="transition hover:text-accent"
+                        href={`/services/${service.service_id}`}
+                      >
+                        {service.title}
+                      </Link>
                     </h3>
                     <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted-foreground">
                       {service.description}
@@ -328,10 +404,26 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
                       </div>
                     ) : null}
                     <div className="mt-6 flex items-center justify-between gap-4 border-t border-border pt-5">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold">
-                          {initials || (
-                            <UserRound aria-hidden="true" className="size-4" />
+                      <Link
+                        className="flex min-w-0 items-center gap-3"
+                        href={`/students/${service.provider_id}`}
+                      >
+                        <span className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-xs font-bold">
+                          {avatarUrl ? (
+                            <Image
+                              alt={`${providerName} profile photo`}
+                              className="object-cover"
+                              fill
+                              sizes="36px"
+                              src={avatarUrl}
+                            />
+                          ) : (
+                            initials || (
+                              <UserRound
+                                aria-hidden="true"
+                                className="size-4"
+                              />
+                            )
                           )}
                         </span>
                         <div className="min-w-0">
@@ -342,7 +434,13 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
                             Verified student
                           </p>
                         </div>
-                      </div>
+                      </Link>
+                      <Link
+                        className="text-xs font-bold underline underline-offset-4"
+                        href={`/services/${service.service_id}`}
+                      >
+                        View service
+                      </Link>
                     </div>
                   </div>
                 </article>

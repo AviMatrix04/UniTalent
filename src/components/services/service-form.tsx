@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   CircleAlert,
+  ChevronDown,
   Eye,
   LoaderCircle,
   Plus,
@@ -12,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useActionState, useState } from "react";
 
 import {
@@ -36,6 +38,12 @@ type ServiceFormProps = {
   mode: "create" | "edit";
   serviceId?: string;
   status?: "draft" | "published" | "archived";
+  previewImageUrl?: string | null;
+  listingContext?: {
+    hasCover: boolean;
+    portfolioCount: number;
+    profileReady: boolean;
+  };
 };
 
 export function ServiceForm({
@@ -46,6 +54,8 @@ export function ServiceForm({
   mode,
   serviceId,
   status = "draft",
+  previewImageUrl,
+  listingContext,
 }: ServiceFormProps) {
   const action =
     mode === "edit" && serviceId
@@ -58,6 +68,34 @@ export function ServiceForm({
   const [skillInput, setSkillInput] = useState("");
   const [skillError, setSkillError] = useState<string | null>(null);
   const previewCents = parseUsdToCents(preview.price);
+  const strengthChecks = listingContext
+    ? [
+        {
+          complete: preview.description.trim().length >= 100,
+          label: "Detailed description",
+        },
+        {
+          complete: selectedSkills.length >= 1,
+          label: "At least one skill",
+        },
+        { complete: listingContext.hasCover, label: "Portfolio cover" },
+        {
+          complete: listingContext.portfolioCount >= 3,
+          label: "Three portfolio images",
+        },
+        {
+          complete: listingContext.profileReady,
+          label: "Publish-ready profile",
+        },
+      ]
+    : [];
+  const strengthScore = strengthChecks.length
+    ? Math.round(
+        (strengthChecks.filter((check) => check.complete).length /
+          strengthChecks.length) *
+          100,
+      )
+    : 0;
 
   function addSkill() {
     const skill = skillInput.trim().replace(/\s+/g, " ");
@@ -113,9 +151,8 @@ export function ServiceForm({
             {mode === "create" ? "Offer your talent." : "Shape your listing."}
           </h1>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Start with the essentials. Skill tags and portfolio images arrive in
-            later phases, and this listing will remain private until you publish
-            it.
+            Start with the essentials. Save this listing as a draft, then add
+            portfolio images from the edit page before publishing it.
           </p>
         </div>
 
@@ -187,7 +224,7 @@ export function ServiceForm({
 
             <fieldset>
               <legend className="text-sm font-semibold">Pricing</legend>
-              <div className="mt-2 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(180px,0.7fr)]">
+              <div className="mt-2 grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm font-medium">
                   Price in USD
                   <div className="relative mt-2">
@@ -196,7 +233,7 @@ export function ServiceForm({
                     </span>
                     <input
                       aria-describedby="price-help"
-                      className={`${inputClassName} mt-0 pl-8`}
+                      className={`${inputClassName} !mt-0 pl-8`}
                       defaultValue={formState.fields.price}
                       inputMode="decimal"
                       maxLength={11}
@@ -217,21 +254,27 @@ export function ServiceForm({
 
                 <label className="block text-sm font-medium">
                   Charge per
-                  <select
-                    className={inputClassName}
-                    defaultValue={formState.fields.priceUnit}
-                    name="priceUnit"
-                    required
-                    onChange={(event) =>
-                      setPreview((current) => ({
-                        ...current,
-                        priceUnit: event.target.value as "hour" | "project",
-                      }))
-                    }
-                  >
-                    <option value="hour">Hour</option>
-                    <option value="project">Service</option>
-                  </select>
+                  <div className="relative mt-2">
+                    <select
+                      className={`${inputClassName} !mt-0 appearance-none pr-11`}
+                      defaultValue={formState.fields.priceUnit}
+                      name="priceUnit"
+                      required
+                      onChange={(event) =>
+                        setPreview((current) => ({
+                          ...current,
+                          priceUnit: event.target.value as "hour" | "project",
+                        }))
+                      }
+                    >
+                      <option value="hour">Hour</option>
+                      <option value="project">Service</option>
+                    </select>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                  </div>
                 </label>
               </div>
               <p
@@ -260,7 +303,7 @@ export function ServiceForm({
               <legend className="text-sm font-semibold">Skills</legend>
               <p className="mt-2 text-xs leading-5 text-muted-foreground">
                 Add up to five skills that help students discover this service.
-                You can select an existing skill or create a new one.
+                Choose from the approved skill catalog, including Other.
               </p>
 
               {selectedSkills.map((skill) => (
@@ -272,29 +315,35 @@ export function ServiceForm({
                   <label className="sr-only" htmlFor="skill-input">
                     Add a skill
                   </label>
-                  <select
-                    className={`${inputClassName} mt-0`}
-                    disabled={selectedSkills.length >= MAX_SERVICE_SKILLS}
-                    id="skill-input"
-                    value={skillInput}
-                    onChange={(event) => setSkillInput(event.target.value)}
-                  >
-                    <option value="">Choose a skill…</option>
-                    {availableSkills
-                      .filter(
-                        (skill) =>
-                          !selectedSkills.some(
-                            (selected) =>
-                              normalizeSkillName(selected) ===
-                              normalizeSkillName(skill),
-                          ),
-                      )
-                      .map((skill) => (
-                        <option key={skill} value={skill}>
-                          {skill}
-                        </option>
-                      ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      className={`${inputClassName} !mt-0 appearance-none pr-11`}
+                      disabled={selectedSkills.length >= MAX_SERVICE_SKILLS}
+                      id="skill-input"
+                      value={skillInput}
+                      onChange={(event) => setSkillInput(event.target.value)}
+                    >
+                      <option value="">Choose a skill…</option>
+                      {availableSkills
+                        .filter(
+                          (skill) =>
+                            !selectedSkills.some(
+                              (selected) =>
+                                normalizeSkillName(selected) ===
+                                normalizeSkillName(skill),
+                            ),
+                        )
+                        .map((skill) => (
+                          <option key={skill} value={skill}>
+                            {skill}
+                          </option>
+                        ))}
+                    </select>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                  </div>
                 </div>
                 <button
                   className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-border px-4 text-sm font-bold transition hover:border-foreground/30 hover:bg-muted disabled:opacity-50"
@@ -382,11 +431,25 @@ export function ServiceForm({
         </div>
         <article className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
           <div className="relative flex aspect-[16/10] items-end overflow-hidden bg-secondary p-6">
-            <div className="absolute -right-12 -top-16 size-56 rounded-full border border-foreground/10" />
-            <div className="absolute -bottom-20 -left-10 size-52 rounded-full bg-accent/90" />
+            {previewImageUrl ? (
+              <Image
+                alt="Selected portfolio cover"
+                className="object-cover"
+                fill
+                sizes="(max-width: 1280px) 100vw, 420px"
+                src={previewImageUrl}
+              />
+            ) : (
+              <>
+                <div className="absolute -right-12 -top-16 size-56 rounded-full border border-foreground/10" />
+                <div className="absolute -bottom-20 -left-10 size-52 rounded-full bg-accent/90" />
+              </>
+            )}
             <span className="relative inline-flex items-center gap-2 rounded-full bg-card/90 px-3 py-2 text-xs font-bold backdrop-blur">
               <Sparkles aria-hidden="true" className="size-3.5 text-accent" />
-              Portfolio image coming in Phase 5
+              {mode === "create"
+                ? "Save draft to add portfolio images"
+                : "Manage portfolio below"}
             </span>
           </div>
           <div className="p-6">
@@ -426,6 +489,54 @@ export function ServiceForm({
             </div>
           </div>
         </article>
+        {listingContext ? (
+          <section className="mt-5 rounded-3xl border border-border bg-card p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-accent">
+                  Listing strength
+                </p>
+                <h2 className="mt-2 font-heading text-3xl">
+                  Make it stand out.
+                </h2>
+              </div>
+              <span className="flex size-14 items-center justify-center rounded-full bg-secondary text-sm font-black">
+                {strengthScore}%
+              </span>
+            </div>
+            <div className="mt-5 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-accent transition-[width] duration-500"
+                style={{ width: `${strengthScore}%` }}
+              />
+            </div>
+            <ul className="mt-5 space-y-3">
+              {strengthChecks.map((check) => (
+                <li
+                  className="flex items-center gap-3 text-sm"
+                  key={check.label}
+                >
+                  <span
+                    className={`flex size-5 items-center justify-center rounded-full text-xs font-black ${
+                      check.complete
+                        ? "bg-secondary text-foreground"
+                        : "border border-border text-muted-foreground"
+                    }`}
+                  >
+                    {check.complete ? "✓" : "·"}
+                  </span>
+                  <span
+                    className={
+                      check.complete ? "font-semibold" : "text-muted-foreground"
+                    }
+                  >
+                    {check.label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </aside>
     </div>
   );

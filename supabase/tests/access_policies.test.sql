@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(67);
+select plan(71);
 
 -- Keep assertions deterministic when the local development seed is enabled.
 -- The surrounding transaction rolls this cleanup back after the suite.
@@ -183,6 +183,20 @@ values
     'hidden skill',
     '10000000-0000-0000-0000-000000000002',
     true
+  ),
+  (
+    '30000000-0000-0000-0000-000000000003',
+    'Photography',
+    'photography',
+    null,
+    false
+  ),
+  (
+    '30000000-0000-0000-0000-000000000004',
+    'Web Design',
+    'web design',
+    null,
+    false
   );
 
 insert into public.service_skills (service_id, skill_id, position)
@@ -404,8 +418,8 @@ select results_eq(
 );
 
 select results_eq(
-  $$select count(*) from public.skills$$,
-  array[1::bigint],
+  $$select count(*) from public.skills where normalized_name = 'hidden skill'$$,
+  array[0::bigint],
   'a student cannot read another student hidden skill'
 );
 
@@ -475,16 +489,18 @@ select throws_ok(
   'a student cannot add another profile contact method'
 );
 
-select lives_ok(
+select throws_ok(
   $$
     insert into public.skills (name, normalized_name, created_by)
     values (
-      'Web Design',
-      'web design',
+      'Unapproved Skill',
+      'unapproved skill',
       '10000000-0000-0000-0000-000000000001'
     )
   $$,
-  'a student can create a visible skill'
+  '42501',
+  null,
+  'a student cannot add an unapproved catalog skill'
 );
 
 select throws_ok(
@@ -967,6 +983,50 @@ select results_eq(
   $$select private.is_verified_sdsu_student()$$,
   array[false],
   'the verified-student helper rejects a non-SDSU account'
+);
+
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000001","role":"authenticated","email":"owner@sdsu.edu"}';
+
+select lives_ok(
+  $$
+    insert into storage.objects (bucket_id, name, owner_id)
+    values (
+      'service-images',
+      '10000000-0000-0000-0000-000000000001/20000000-0000-0000-0000-000000000001/photo.jpg',
+      '10000000-0000-0000-0000-000000000001'
+    )
+  $$,
+  'a service owner can upload to their service image path'
+);
+
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000002","role":"authenticated","email":"other@sdsu.edu"}';
+
+select throws_ok(
+  $$
+    insert into storage.objects (bucket_id, name, owner_id)
+    values (
+      'service-images',
+      '10000000-0000-0000-0000-000000000002/20000000-0000-0000-0000-000000000001/stolen.jpg',
+      '10000000-0000-0000-0000-000000000002'
+    )
+  $$,
+  '42501',
+  null,
+  'another student cannot upload images to someone else service'
+);
+
+select results_eq(
+  $$select count(*) from storage.objects where bucket_id = 'service-images'$$,
+  array[1::bigint],
+  'verified students can read service images'
+);
+
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000003","role":"authenticated","email":"outsider@example.com"}';
+
+select results_eq(
+  $$select count(*) from storage.objects where bucket_id = 'service-images'$$,
+  array[0::bigint],
+  'non-SDSU accounts cannot read service images'
 );
 
 reset role;

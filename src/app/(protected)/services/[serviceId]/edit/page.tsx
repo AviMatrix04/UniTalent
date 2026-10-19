@@ -3,6 +3,13 @@ import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { ServiceForm } from "@/components/services/service-form";
+import {
+  PortfolioManager,
+  type PortfolioItem,
+} from "@/components/services/portfolio-manager";
+import { ServiceCelebration } from "@/components/services/service-celebration";
+import { ToastMessage } from "@/components/ui/toast-message";
+import { SERVICE_IMAGE_BUCKET } from "@/lib/services/portfolio";
 import { centsToUsdInput, isPricingUnit } from "@/lib/services/validation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,7 +18,7 @@ export const instant = false;
 
 type EditServicePageProps = {
   params: Promise<{ serviceId: string }>;
-  searchParams: Promise<{ message?: string }>;
+  searchParams: Promise<{ celebrate?: string; message?: string }>;
 };
 
 export default async function EditServicePage({
@@ -19,7 +26,7 @@ export default async function EditServicePage({
   searchParams,
 }: EditServicePageProps) {
   await connection();
-  const [{ serviceId }, { message }] = await Promise.all([
+  const [{ serviceId }, { celebrate, message }] = await Promise.all([
     params,
     searchParams,
   ]);
@@ -29,26 +36,46 @@ export default async function EditServicePage({
 
   if (!userId) redirect(`/auth/login?next=/services/${serviceId}/edit`);
 
-  const [serviceResult, availableSkillsResult, selectedSkillsResult] =
-    await Promise.all([
-      supabase
-        .from("services")
-        .select("id,title,description,price_cents,price_unit,status")
-        .eq("id", serviceId)
-        .eq("student_id", userId)
-        .maybeSingle(),
-      supabase
-        .from("skills")
-        .select("name")
-        .eq("is_hidden", false)
-        .order("normalized_name")
-        .limit(100),
-      supabase
-        .from("service_skills")
-        .select("position,skills(name)")
-        .eq("service_id", serviceId)
-        .order("position"),
-    ]);
+  const [
+    serviceResult,
+    availableSkillsResult,
+    selectedSkillsResult,
+    portfolioResult,
+    profileResult,
+    contactsResult,
+  ] = await Promise.all([
+    supabase
+      .from("services")
+      .select("id,title,description,price_cents,price_unit,status")
+      .eq("id", serviceId)
+      .eq("student_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("skills")
+      .select("name")
+      .eq("is_hidden", false)
+      .order("normalized_name")
+      .limit(100),
+    supabase
+      .from("service_skills")
+      .select("position,skills(name)")
+      .eq("service_id", serviceId)
+      .order("position"),
+    supabase
+      .from("portfolio_items")
+      .select(
+        "id,storage_path,caption,mime_type,size_bytes,sort_order,is_cover",
+      )
+      .eq("service_id", serviceId)
+      .order("sort_order"),
+    supabase.from("profiles").select("full_name,bio").eq("id", userId).single(),
+    supabase
+      .from("contact_methods")
+      .select("id")
+      .eq("profile_id", userId)
+      .eq("is_visible", true)
+      .limit(1),
+  ]);
 
   const { data: service, error } = serviceResult;
 
@@ -57,7 +84,10 @@ export default async function EditServicePage({
     !service ||
     service.status === "hidden" ||
     availableSkillsResult.error ||
-    selectedSkillsResult.error
+    selectedSkillsResult.error ||
+    portfolioResult.error ||
+    profileResult.error ||
+    contactsResult.error
   ) {
     notFound();
   }
@@ -77,24 +107,60 @@ export default async function EditServicePage({
     service.status === "published" || service.status === "archived"
       ? service.status
       : "draft";
+  const orderedSkills = [...(availableSkillsResult.data ?? [])].sort(
+    (left, right) => {
+      if (left.name.toLowerCase() === "other") return 1;
+      if (right.name.toLowerCase() === "other") return -1;
+      return left.name.localeCompare(right.name);
+    },
+  );
+  const portfolioItems = await Promise.all(
+    (portfolioResult.data ?? []).map(async (item) => {
+      const { data } = await supabase.storage
+        .from(SERVICE_IMAGE_BUCKET)
+        .createSignedUrl(item.storage_path, 60 * 60);
+      return { ...item, signedUrl: data?.signedUrl ?? "" } as PortfolioItem;
+    }),
+  );
+  const previewImageUrl =
+    portfolioItems.find((item) => item.is_cover)?.signedUrl ||
+    portfolioItems[0]?.signedUrl ||
+    null;
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
+      <ToastMessage message={message} />
+      <ServiceCelebration
+        kind={celebrate === "draft" ? "draft" : undefined}
+        serviceId={serviceId}
+      />
       <ServiceForm
-        availableSkills={(availableSkillsResult.data ?? []).map(
-          (skill) => skill.name,
-        )}
+        availableSkills={orderedSkills.map((skill) => skill.name)}
         initialFields={{
           title: service.title,
           description: service.description,
           price: centsToUsdInput(service.price_cents),
           priceUnit,
         }}
-        message={message}
         mode="edit"
         initialSkills={initialSkills}
+        listingContext={{
+          hasCover: portfolioItems.some((item) => item.is_cover),
+          portfolioCount: portfolioItems.length,
+          profileReady: Boolean(
+            profileResult.data.full_name &&
+            profileResult.data.bio &&
+            contactsResult.data?.length,
+          ),
+        }}
         serviceId={service.id}
         status={status}
+        previewImageUrl={previewImageUrl}
+      />
+      <PortfolioManager
+        initialItems={portfolioItems}
+        serviceId={service.id}
+        userId={userId}
       />
     </main>
   );
