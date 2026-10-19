@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(49);
 
 -- Keep assertions deterministic when the local development seed is enabled.
 -- The surrounding transaction rolls this cleanup back after the suite.
@@ -104,6 +104,27 @@ values
     '6195550100',
     false
   );
+
+select results_eq(
+  $$
+    select public, file_size_limit
+    from storage.buckets
+    where id = 'avatars'
+  $$,
+  $$values (false, 5242880::bigint)$$,
+  'the avatar bucket is private and limited to 5 MB files'
+);
+
+select throws_ok(
+  $$
+    update public.profiles
+    set avatar_path = 'another-user/avatar.png'
+    where id = '10000000-0000-0000-0000-000000000001'
+  $$,
+  '23514',
+  null,
+  'a profile cannot reference an avatar outside its owner folder'
+);
 
 insert into public.services (
   id,
@@ -248,6 +269,46 @@ select results_eq(
   'creating an Auth user provisions a profile from safe metadata'
 );
 
+select throws_ok(
+  $$
+    insert into public.contact_methods (profile_id, type, value)
+    values ('10000000-0000-0000-0000-000000000002', 'email', 'not-an-email')
+  $$,
+  '23514',
+  null,
+  'the database rejects an invalid contact email'
+);
+
+select throws_ok(
+  $$
+    insert into public.contact_methods (profile_id, type, value)
+    values ('10000000-0000-0000-0000-000000000001', 'phone', '123')
+  $$,
+  '23514',
+  null,
+  'the database rejects an invalid contact phone number'
+);
+
+select throws_ok(
+  $$
+    insert into public.contact_methods (profile_id, type, value)
+    values ('10000000-0000-0000-0000-000000000001', 'instagram', 'invalid handle!')
+  $$,
+  '23514',
+  null,
+  'the database rejects an invalid Instagram handle'
+);
+
+select throws_ok(
+  $$
+    insert into public.contact_methods (profile_id, type, value)
+    values ('10000000-0000-0000-0000-000000000001', 'linkedin', 'https://example.com/student')
+  $$,
+  '23514',
+  null,
+  'the database rejects a non-LinkedIn profile URL'
+);
+
 set local role anon;
 
 select throws_ok(
@@ -273,6 +334,61 @@ select results_eq(
   $$select count(*) from public.profiles$$,
   array[4::bigint],
   'a verified SDSU student can read profiles'
+);
+
+select lives_ok(
+  $$
+    insert into storage.objects (bucket_id, name, owner_id)
+    values (
+      'avatars',
+      '10000000-0000-0000-0000-000000000001/avatar.png',
+      '10000000-0000-0000-0000-000000000001'
+    )
+  $$,
+  'a student can upload an avatar in their own folder'
+);
+
+select throws_ok(
+  $$
+    insert into storage.objects (bucket_id, name, owner_id)
+    values (
+      'avatars',
+      '10000000-0000-0000-0000-000000000002/avatar.png',
+      '10000000-0000-0000-0000-000000000001'
+    )
+  $$,
+  '42501',
+  null,
+  'a student cannot upload an avatar in another student folder'
+);
+
+select results_eq(
+  $$select count(*) from storage.objects where bucket_id = 'avatars'$$,
+  array[1::bigint],
+  'a verified student can read stored avatars'
+);
+
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000003","role":"authenticated","email":"outsider@example.com"}';
+
+select results_eq(
+  $$select count(*) from storage.objects where bucket_id = 'avatars'$$,
+  array[0::bigint],
+  'a non-SDSU account cannot read stored avatars'
+);
+
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000001","role":"authenticated","email":"owner@sdsu.edu"}';
+
+select results_eq(
+  $$
+    select count(*)
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'students can delete their own avatar'
+      and cmd = 'DELETE'
+  $$,
+  array[1::bigint],
+  'avatar deletion is governed by an explicit storage policy'
 );
 
 select results_eq(

@@ -35,6 +35,23 @@ export default async function ProtectedLayout({
             UNI<span className="text-accent">-</span>TALENT
           </Link>
           <div className="flex items-center gap-4">
+            <nav
+              aria-label="Student account"
+              className="hidden items-center gap-1 md:flex"
+            >
+              <Link
+                className="rounded-full px-3 py-2 text-sm font-semibold transition hover:bg-muted"
+                href="/dashboard"
+              >
+                Dashboard
+              </Link>
+              <Link
+                className="rounded-full px-3 py-2 text-sm font-semibold transition hover:bg-muted"
+                href="/profile/settings"
+              >
+                Profile
+              </Link>
+            </nav>
             <span className="hidden text-sm text-muted-foreground sm:block">
               {email}
             </span>

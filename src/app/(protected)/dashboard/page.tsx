@@ -1,5 +1,6 @@
 import { BadgeCheck, Compass, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -13,9 +14,15 @@ export default function DashboardPage() {
         You’re inside the UNI-TALENT directory.
       </h1>
       <p className="mt-6 max-w-2xl text-base leading-7 text-muted-foreground">
-        Authentication and protected routes are ready. Profile settings and
-        service tools arrive in the next Phase 2 review batch.
+        Authentication and protected routes are ready. Complete your profile and
+        choose how other verified students can contact you.
       </p>
+      <Link
+        className="mt-8 inline-flex rounded-full bg-accent px-5 py-3 text-sm font-bold text-accent-foreground transition hover:-translate-y-0.5 hover:bg-accent/90 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        href="/profile/settings"
+      >
+        Complete your profile
+      </Link>
 
       <div className="mt-12 grid gap-4 sm:grid-cols-3">
         {[
