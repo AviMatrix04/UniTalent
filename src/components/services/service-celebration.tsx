@@ -19,14 +19,15 @@ export function ServiceCelebration({
   serviceId?: string;
 }) {
   const [open, setOpen] = useState(Boolean(kind));
+  const shouldLockScroll = Boolean(kind) && open;
   useEffect(() => {
-    if (!open || !kind) return;
+    if (!shouldLockScroll) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previous;
     };
-  }, [kind, open]);
+  }, [shouldLockScroll]);
 
   if (!kind || !open) return null;
   const published = kind === "published";
